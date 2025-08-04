@@ -1,0 +1,143 @@
+-- Create tables for HealthKart influencer campaign data
+CREATE TABLE influencers (
+    influencer_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT,
+    gender TEXT,
+    follower_count INTEGER,
+    platform TEXT
+);
+
+CREATE TABLE posts (
+    post_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    influencer_id TEXT,
+    platform TEXT,
+    date DATE,
+    url TEXT,
+    caption TEXT,
+    reach INTEGER,
+    likes INTEGER,
+    comments INTEGER,
+    FOREIGN KEY (influencer_id) REFERENCES influencers(influencer_id)
+);
+
+CREATE TABLE tracking_data (
+    tracking_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT,
+    campaign TEXT,
+    influencer_id TEXT,
+    user_id TEXT,
+    product TEXT,
+    date DATE,
+    orders INTEGER,
+    revenue INTEGER,
+    FOREIGN KEY (influencer_id) REFERENCES influencers(influencer_id)
+);
+
+CREATE TABLE payouts (
+    payout_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    influencer_id TEXT,
+    basis TEXT CHECK(basis IN ('post', 'order')),
+    rate INTEGER,
+    orders INTEGER,
+    total_payout INTEGER,
+    FOREIGN KEY (influencer_id) REFERENCES influencers(influencer_id)
+);
+
+-- Insert simulated data (example subset; full data generated in Python)
+INSERT INTO influencers (influencer_id, name, category, gender, follower_count, platform) VALUES
+    ('inf1', 'FitGuru', 'Fitness', 'M', 100000, 'Instagram'),
+    ('inf2', 'HealthNut', 'Nutrition', 'F', 50000, 'YouTube'),
+    ('inf3', 'GymQueen', 'Fitness', 'F', 75000, 'Instagram'),
+    ('inf4', 'VitalVibe', 'Wellness', 'M', 200000, 'Twitter'),
+    ('inf5', 'MuscleMan', 'Bodybuilding', 'M', 150000, 'Instagram');
+
+INSERT INTO posts (influencer_id, platform, date, url, caption, reach, likes, comments) VALUES
+    ('inf1', 'Instagram', '2025-01-15', 'https://example.com/post/1', 'Promoting MuscleBlaze', 20000, 1000, 50),
+    ('inf2', 'YouTube', '2025-02-01', 'https://example.com/post/2', 'Promoting HKVitals', 15000, 800, 30),
+    ('inf3', 'Instagram', '2025-03-10', 'https://example.com/post/3', 'Promoting Gritzo', 25000, 1200, 60),
+    ('inf4', 'Twitter', '2025-04-05', 'https://example.com/post/4', 'Promoting MuscleBlaze', 30000, 1500, 70),
+    ('inf5', 'Instagram', '2025-05-20', 'https://example.com/post/5', 'Promoting HKVitals', 18000, 900, 40);
+
+INSERT INTO tracking_data (source, campaign, influencer_id, user_id, product, date, orders, revenue) VALUES
+    ('Influencer', 'MuscleBlaze_Camp1', 'inf1', 'user1', 'Whey Protein', '2025-01-16', 3, 1500),
+    ('Influencer', 'HKVitals_Launch', 'inf2', 'user2', 'Multivitamin', '2025-02-02', 2, 1000),
+    ('Influencer', 'Gritzo_Kids', 'inf3', 'user3', 'Kids Nutrition', '2025-03-11', 4, 2000),
+    ('Influencer', 'MuscleBlaze_Camp1', 'inf4', 'user4', 'Whey Protein', '2025-04-06', 1, 500),
+    ('Influencer', 'HKVitals_Launch', 'inf5', 'user5', 'Multivitamin', '2025-05-21', 3, 1800);
+
+INSERT INTO payouts (influencer_id, basis, rate, orders, total_payout) VALUES
+    ('inf1', 'post', 500, 0, 500),
+    ('inf2', 'order', 10, 20, 200),
+    ('inf3', 'post', 750, 0, 750),
+    ('inf4', 'order', 15, 10, 150),
+    ('inf5', 'post', 600, 0, 600);
+
+-- Views for analytics
+-- Campaign Performance
+CREATE VIEW campaign_performance AS
+SELECT 
+    campaign,
+    SUM(orders) AS total_orders,
+    SUM(revenue) AS total_revenue
+FROM tracking_data
+GROUP BY campaign;
+
+-- ROAS and Incremental ROAS
+CREATE VIEW roas_analysis AS
+SELECT 
+    t.influencer_id,
+    i.name,
+    SUM(t.revenue) AS total_revenue,
+    SUM(p.total_payout) AS total_payout,
+    CASE 
+        WHEN SUM(p.total_payout) = 0 THEN 0
+        ELSE SUM(t.revenue) / SUM(p.total_payout)
+    END AS roas,
+    CASE 
+        WHEN SUM(p.total_payout) = 0 THEN 0
+        ELSE (SUM(t.revenue) / SUM(p.total_payout)) * 0.5
+    END AS incremental_roas
+FROM tracking_data t
+JOIN influencers i ON t.influencer_id = i.influencer_id
+JOIN payouts p ON t.influencer_id = p.influencer_id
+GROUP BY t.influencer_id, i.name;
+
+-- Engagement Rate by Category
+CREATE VIEW engagement_by_category AS
+SELECT 
+    i.category,
+    AVG((p.likes + p.comments) * 1.0 / p.reach) AS engagement_rate
+FROM posts p
+JOIN influencers i ON p.influencer_id = i.influencer_id
+GROUP BY i.category;
+
+-- Influencer Personas
+CREATE VIEW influencer_personas AS
+SELECT 
+    category,
+    AVG(follower_count) AS avg_follower_count,
+    COUNT(*) AS influencer_count
+FROM influencers
+GROUP BY category;
+
+-- Poor ROAS Influencers
+CREATE VIEW poor_roas AS
+SELECT 
+    r.influencer_id,
+    r.name,
+    r.roas,
+    r.incremental_roas
+FROM roas_analysis r
+WHERE r.roas < 1;
+
+-- Payout Summary
+CREATE VIEW payout_summary AS
+SELECT 
+    p.influencer_id,
+    i.name,
+    p.basis,
+    SUM(p.total_payout) AS total_payout
+FROM payouts p
+JOIN influencers i ON p.influencer_id = i.influencer_id
+GROUP BY p.influencer_id, i.name, p.basis;
